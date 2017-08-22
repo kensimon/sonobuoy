@@ -66,9 +66,7 @@
                   "name": "sonobuoy-plugins-volume"
                },
                {
-                  "hostPath": {
-                     "path": "/tmp/sonobuoy"
-                  },
+                  "emptyDir": { },
                   "name": "output-volume"
                }
             ]
