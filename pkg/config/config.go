@@ -32,6 +32,7 @@ var ClusterResources = []string{
 	"ClusterRoleBindings",
 	"ClusterRoles",
 	"ComponentStatuses",
+	"CustomResourceDefinitions",
 	"Nodes",
 	"PersistentVolumes",
 	"PodSecurityPolicies",

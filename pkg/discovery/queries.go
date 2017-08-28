@@ -29,7 +29,6 @@ import (
 	"k8s.io/apimachinery/pkg/conversion"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes"
 )
 
 // ObjQuery is a query function that returns a kubernetes object
@@ -109,7 +108,9 @@ func timedQuery(recorder *QueryRecorder, name string, ns string, fn func() (time
 }
 
 // queryNsResource performs the appropriate namespace-scoped query according to its input args
-func queryNsResource(ns string, resourceKind string, opts metav1.ListOptions, kubeClient kubernetes.Interface) (runtime.Object, error) {
+func queryNsResource(ns string, resourceKind string, opts metav1.ListOptions, multiClient config.MultiClient) (runtime.Object, error) {
+	kubeClient := multiClient.CoreClient
+
 	switch resourceKind {
 	case "ConfigMaps":
 		return kubeClient.CoreV1().ConfigMaps(ns).List(opts)
@@ -165,7 +166,10 @@ func queryNsResource(ns string, resourceKind string, opts metav1.ListOptions, ku
 }
 
 // queryNonNsResource performs the appropriate non-namespace-scoped query according to its input args
-func queryNonNsResource(resourceKind string, kubeClient kubernetes.Interface) (runtime.Object, error) {
+func queryNonNsResource(resourceKind string, multiClient config.MultiClient) (runtime.Object, error) {
+	kubeClient := multiClient.CoreClient
+	extensionsClient := multiClient.ExtensionsClient
+
 	switch resourceKind {
 	case "CertificateSigningRequests":
 		return kubeClient.Certificates().CertificateSigningRequests().List(metav1.ListOptions{})
@@ -175,6 +179,8 @@ func queryNonNsResource(resourceKind string, kubeClient kubernetes.Interface) (r
 		return kubeClient.Rbac().ClusterRoles().List(metav1.ListOptions{})
 	case "ComponentStatuses":
 		return kubeClient.CoreV1().ComponentStatuses().List(metav1.ListOptions{})
+	case "CustomResourceDefinitions":
+		return extensionsClient.ApiextensionsV1beta1().CustomResourceDefinitions().List(metav1.ListOptions{})
 	case "Nodes":
 		return kubeClient.CoreV1().Nodes().List(metav1.ListOptions{})
 	case "PersistentVolumes":
@@ -193,7 +199,7 @@ func queryNonNsResource(resourceKind string, kubeClient kubernetes.Interface) (r
 // QueryNSResources will query namespace-specific resources in the cluster,
 // writing them out to <resultsdir>/resources/ns/<ns>/*.json
 // TODO: Eliminate dependencies from config.Config and pass in data
-func QueryNSResources(kubeClient kubernetes.Interface, recorder *QueryRecorder, ns string, cfg *config.Config) error {
+func QueryNSResources(multiClient config.MultiClient, recorder *QueryRecorder, ns string, cfg *config.Config) error {
 	glog.Infof("Running ns query (%v)", ns)
 
 	// 1. Create the parent directory we will use to store the results
@@ -216,7 +222,7 @@ func QueryNSResources(kubeClient kubernetes.Interface, recorder *QueryRecorder, 
 
 	// 3. Execute the ns-query
 	for resourceKind := range resources {
-		lister := func() (runtime.Object, error) { return queryNsResource(ns, resourceKind, opts, kubeClient) }
+		lister := func() (runtime.Object, error) { return queryNsResource(ns, resourceKind, opts, multiClient) }
 		query := func() (time.Duration, error) { return objListQuery(outdir+"/", resourceKind+".json", lister) }
 		timedQuery(recorder, resourceKind, ns, query)
 	}
@@ -224,7 +230,7 @@ func QueryNSResources(kubeClient kubernetes.Interface, recorder *QueryRecorder, 
 	specialResources := cfg.FilterResources(config.SpecialResources)
 	if specialResources["PodLogs"] {
 		start := time.Now()
-		err := gatherPodLogs(kubeClient, ns, opts, cfg)
+		err := gatherPodLogs(multiClient.CoreClient, ns, opts, cfg)
 		if err != nil {
 			return err
 		}
@@ -239,7 +245,7 @@ func QueryNSResources(kubeClient kubernetes.Interface, recorder *QueryRecorder, 
 // QueryClusterResources queries non-namespace resources in the cluster, writing
 // them out to <resultsdir>/resources/non-ns/*.json
 // TODO: Eliminate dependencies from config.Config and pass in data
-func QueryClusterResources(kubeClient kubernetes.Interface, recorder *QueryRecorder, cfg *config.Config) error {
+func QueryClusterResources(multiClient config.MultiClient, recorder *QueryRecorder, cfg *config.Config) error {
 	glog.Infof("Running non-ns query")
 
 	resources := cfg.FilterResources(config.ClusterResources)
@@ -254,7 +260,7 @@ func QueryClusterResources(kubeClient kubernetes.Interface, recorder *QueryRecor
 
 	// 2. Execute the non-ns-query
 	for resourceKind := range resources {
-		lister := func() (runtime.Object, error) { return queryNonNsResource(resourceKind, kubeClient) }
+		lister := func() (runtime.Object, error) { return queryNonNsResource(resourceKind, multiClient) }
 		query := func() (time.Duration, error) { return objListQuery(outdir+"/", resourceKind+".json", lister) }
 		timedQuery(recorder, resourceKind, "", query)
 	}
@@ -266,14 +272,14 @@ func QueryClusterResources(kubeClient kubernetes.Interface, recorder *QueryRecor
 		// NOTE: Node data collection is an aggregated time b/c propagating that detail back up
 		// is odd and would pollute some of the output.
 		start := time.Now()
-		err := gatherNodeData(kubeClient, cfg)
+		err := gatherNodeData(multiClient.CoreClient, cfg)
 		duration := time.Since(start)
 		recorder.RecordQuery("Nodes", "", duration, err)
 	}
 
 	specialResources := cfg.FilterResources(config.SpecialResources)
 	if specialResources["ServerVersion"] {
-		objqry := func() (interface{}, error) { return kubeClient.Discovery().ServerVersion() }
+		objqry := func() (interface{}, error) { return multiClient.CoreClient.Discovery().ServerVersion() }
 		query := func() (time.Duration, error) {
 			return untypedQuery(cfg.OutputDir(), "serverversion.json", objqry)
 		}
@@ -281,7 +287,7 @@ func QueryClusterResources(kubeClient kubernetes.Interface, recorder *QueryRecor
 	}
 
 	if specialResources["ServerGroups"] {
-		objqry := func() (interface{}, error) { return kubeClient.Discovery().ServerGroups() }
+		objqry := func() (interface{}, error) { return multiClient.CoreClient.Discovery().ServerGroups() }
 		query := func() (time.Duration, error) {
 			return untypedQuery(cfg.OutputDir(), "servergroups.json", objqry)
 		}

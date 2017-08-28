@@ -29,11 +29,10 @@ import (
 	pluginaggregation "github.com/heptio/sonobuoy/pkg/plugin/aggregation"
 	"github.com/pkg/errors"
 	"github.com/viniciuschiele/tarx"
-	"k8s.io/client-go/kubernetes"
 )
 
 // Run is the main entrypoint for discovery
-func Run(kubeClient kubernetes.Interface, cfg *config.Config) (errCount uint) {
+func Run(multiClient config.MultiClient, cfg *config.Config) (errCount uint) {
 	// closure used to collect and report errors.
 	trackErrorsFor := func(action string) func(error) {
 		return func(err error) {
@@ -43,6 +42,8 @@ func Run(kubeClient kubernetes.Interface, cfg *config.Config) (errCount uint) {
 			}
 		}
 	}
+
+	kubeClient := multiClient.CoreClient
 
 	t := time.Now()
 	// 1. Get the list of namespaces and apply the regex filter on the namespace
@@ -73,12 +74,12 @@ func Run(kubeClient kubernetes.Interface, cfg *config.Config) (errCount uint) {
 	// 5. Run the queries
 	recorder := NewQueryRecorder()
 	trackErrorsFor("querying cluster resources")(
-		QueryClusterResources(kubeClient, recorder, cfg),
+		QueryClusterResources(multiClient, recorder, cfg),
 	)
 
 	for _, ns := range nslist {
 		trackErrorsFor("querying resources under namespace " + ns)(
-			QueryNSResources(kubeClient, recorder, ns, cfg),
+			QueryNSResources(multiClient, recorder, ns, cfg),
 		)
 	}
 

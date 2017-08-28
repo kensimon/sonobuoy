@@ -25,9 +25,6 @@ import (
 	pluginloader "github.com/heptio/sonobuoy/pkg/plugin/loader"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 // LoadConfig will load the current sonobuoy configuration using the filesystem
@@ -91,32 +88,6 @@ func LoadConfig() (*Config, error) {
 	err = loadAllPlugins(cfg)
 
 	return cfg, err
-}
-
-// LoadClient creates a kube-clientset, using given sonobuoy configuration
-func LoadClient(cfg *Config) (kubernetes.Interface, error) {
-	var config *rest.Config
-	var err error
-
-	// 1 - gather config information used to initialize
-	kubeconfig := viper.GetString("kubeconfig")
-	if len(kubeconfig) > 0 {
-		cfg.Kubeconfig = kubeconfig
-		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
-	} else {
-		config, err = rest.InClusterConfig()
-	}
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	// 2 - creates the clientset from kubeconfig
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-
-	return clientset, nil
 }
 
 // loadAllPlugins takes the given sonobuoy configuration and gives back a

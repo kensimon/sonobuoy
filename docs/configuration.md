@@ -45,6 +45,7 @@ See [Parameter Reference][3] for a more detailed description of each setting.
         "ClusterRoleBindings",
         "ClusterRoles",
         "ComponentStatuses",
+        "CustomResourceDefinitions",
         "Nodes",
         "PersistentVolumes",
         "PodSecurityPolicies",

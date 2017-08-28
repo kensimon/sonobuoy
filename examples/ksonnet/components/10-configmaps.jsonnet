@@ -38,6 +38,7 @@ local sonobuoyConfigData = {
         "ClusterRoleBindings",
         "ClusterRoles",
         "ComponentStatuses",
+        "CustomResourceDefinitions",
         "Nodes",
         "PersistentVolumes",
         "PodSecurityPolicies",

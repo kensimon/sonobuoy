@@ -52,7 +52,7 @@ func runMaster(cmd *cobra.Command, args []string) {
 	}
 
 	// Load a kubernetes client
-	kubeClient, err := config.LoadClient(cfg)
+	kubeClient, err := config.LoadMultiClient(cfg)
 	if err != nil {
 		errlog.LogError(err)
 		os.Exit(1)
